@@ -14,7 +14,7 @@ def refine(name):
     filea=open(filename, "w")
 
     for line in lines:
-        #if not re.match(r'^\s*$', line):
+       
         if "HandleValueNotification" in line:
             filea.write(line.split("HandleValueNotification on handle 000D with value " ,1) [1])
     filea.close()
