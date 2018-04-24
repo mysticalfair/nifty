@@ -24,13 +24,14 @@ int main(int argc, char* argv[])
     cacheSize=(cacheSize<<10); //turns this to bytes
     unsigned int setNum=(cacheSize/blockSize)/wayNum;  //the set # = frames/ways, and frames=cache/blocksize
     unsigned int blockNum=(cacheSize/blockSize);
-    unsigned int tagBits=log((blockNum/setNum))/log(2); //tagbits
+
     //i need a 2d array that goes set 0 set 1, and then way way way, valid tag data
     //it goes tag index block offset and addresses r 24bitx
     int blockOff=log(blockSize)/log(2);
     int index=log(setNum)/log(2);
+      unsigned int tagBits=24-blockOff-index; //tagbits
 
-    long long* memory=(long long*)malloc(1<<24); //memory array
+    unsigned char* memory=(unsigned char*)malloc(1<<24); //memory array
     struct cacheEntry cache[wayNum][setNum]; //cache array of ways by sets
     for(int r=0; r<wayNum; r++)
     {
@@ -38,6 +39,7 @@ int main(int argc, char* argv[])
       {
         struct cacheEntry* temp = (struct cacheEntry*) malloc(sizeof(struct cacheEntry));
         temp->valid=0; temp->tag=-1;temp->counter=0;
+        cache[r][c]= *temp;
 
       }
     }
@@ -59,14 +61,17 @@ int main(int argc, char* argv[])
         // printf("%s\n", "test");
         // printf("0x%x %d %llx\n", address, access, value);
 
-        int mask = ((1 << tagBits) - 1) << 0;
-        unsigned int tag=address&mask; //gets tag bits
-        printf("test tag");
-        mask = ((1 << index) - 1) << (24-tagBits);
-        unsigned int setindex= address&mask; //gets setindex
+        int mask = (1 << ((index+1)-(index+1))) - 1;
+        unsigned int x= (address>> (index+1)) & mask;
+        unsigned int tag=x; //gets tag bits
+        //printf("test tag");
+        mask = (1 << ((index+1)-(blockOff+1))) - 1;
+         x= (address>> (blockOff+1)) & mask;
+        unsigned int setindex= x; //gets setindex
       //  printf("test index");
-        mask = ((1 << blockOff) - 1) << (24-tagBits-index);
-        unsigned int blockoffset=address&mask; //gets block offset
+        mask = (1 << ((blockOff+1)-0)) - 1;
+        x= (address>> 0) & mask;
+        unsigned int blockoffset=x; //gets block offset
 
         int exists=0;
         int full=1;
@@ -80,7 +85,7 @@ int main(int argc, char* argv[])
             exists=1;
             strcpy(result, "hit");
             *(memory+((setindex*blockSize)+blockoffset))=value; //writes to memory the new value
-            cache[i][setindex].counter=count; //increments this to be new
+            (cache[i] + setindex)->counter=count; //increments this to be new
             count++;
           }
 
@@ -93,7 +98,7 @@ int main(int argc, char* argv[])
         if(exists==0)// means there's a miss
         {
           strcpy(result, "miss");
-          *(memory+((setindex*blockSize)+blockoffset))=value; //just writes it to memory
+          memory[((setindex*blockSize)+blockoffset)]=value; //just writes it to memory
         }
 
         printf("%s %d %s\n", word, address, result);
@@ -102,27 +107,37 @@ int main(int argc, char* argv[])
       else if(strcmp(word, "load")==0)
       {
         fscanf(file, "%d %d", &address, &access);
-        int mask = ((1 << tagBits) - 1) << 0;
-        unsigned int tag=address&mask; //gets tag bits
-        mask = ((1 << index) - 1) << (24-tagBits);
-        unsigned int setindex= address&mask; //gets setindex
-        mask = ((1 << blockOff) - 1) << (24-tagBits-index);
-        unsigned int blockoffset=address&mask; //gets block offset
+
+        int mask = (1 << ((index+1)-(index+1))) - 1;
+        unsigned int x= (address>> (index+1)) & mask;
+        unsigned int tag=x; //gets tag bits
+        //printf("test tag");
+        mask = (1 << ((index+1)-(blockOff+1))) - 1;
+         x= (address>> (blockOff+1)) & mask;
+        unsigned int setindex= x; //gets setindex
+      //  printf("test index");
+        mask = (1 << ((blockOff+1)-0)) - 1;
+        x= (address>> 0) & mask;
+        unsigned int blockoffset=x;
+
+         //gets block offset
+
+
         long long answer;
         int exists=0;
         int full=1;
         for(int i=0; i<wayNum; i++)
         {
-          if(cache[i][setindex].tag==tag)
+          if((cache[i] + setindex)->tag==tag)
           {
             exists=1;
             strcpy(result, "hit");
             answer=*(memory+((setindex*blockSize)+blockoffset)); //writes to memory the new value
-            cache[i][setindex].counter=count; //increments this to be new
+            (cache[i] + setindex)->counter=count; //increments this to be new
             count++;
           }
 
-          if(cache[i][setindex].valid==0)
+          if((cache[i] + setindex)->valid==0)
           {
             full=0; //finds if the set is full or not
           }
@@ -131,17 +146,16 @@ int main(int argc, char* argv[])
         if(exists==0)// means there's a miss
         {
           strcpy(result, "miss");
-          answer= *(memory+((setindex*blockSize)+blockoffset));//reads value from memory
+          answer= memory[((setindex*blockSize)+blockoffset))];//reads value from memory
 
           if(full==0)//case there's still space
           {
             for(int i=0; i<wayNum; i++)
             {
-              if(cache[i][setindex].valid==0)//finds first available space
+              if((cache[i] + setindex)->valid==0)//finds first available space
               {
-                struct cacheEntry new;
-                new.tag=tag; new.valid=1; new.counter=count; new.value=answer;
-                cache[i][setindex]=new;
+                struct cacheEntry* new= &(cache[i][setindex]);
+                new->tag=tag; new->valid=1; new->counter=count;
                 count++;
                 break;
           }
@@ -154,15 +168,14 @@ int main(int argc, char* argv[])
         int lruIndex;
         for(int i=0; i<wayNum; i++)
         {
-          if(cache[i][setindex].counter<min)
+          if((cache[i] + setindex)->counter<min)
           {
-            cache[i][setindex].counter=min;
+            (cache[i] + setindex)->counter=min;
             lruIndex=i;
           }
       }
-      struct cacheEntry new;
-      new.tag=tag; new.valid=1; new.counter=count; new.value=answer;
-      cache[lruIndex][setindex]=new;
+      struct cacheEntry* new= &(cache[lruIndex][setindex]);
+      new->tag=tag; new->valid=1; new->counter=count;
       count++;
     }
 
