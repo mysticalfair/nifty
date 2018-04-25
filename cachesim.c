@@ -7,7 +7,7 @@
 struct cacheEntry
 {
   int valid;
-  int tag;
+  int  tag;
   int counter;
 
 };
@@ -27,18 +27,20 @@ int main(int argc, char* argv[])
 
     //i need a 2d array that goes set 0 set 1, and then way way way, valid tag data
     //it goes tag index block offset and addresses r 24bitx
-    int blockOff=log(blockSize)/log(2);
-    int index=log(setNum)/log(2);
+    int blockOff=log2(blockSize);
+    int index=log2(setNum);
+
       unsigned int tagBits=24-blockOff-index; //tagbits
 
-    unsigned char* memory=(unsigned char*)malloc(1<<24); //memory array
+    unsigned char* memory=(unsigned char*)calloc(1<<24, 1); //memory array
+    //*memory=0;
     struct cacheEntry cache[wayNum][setNum]; //cache array of ways by sets
     for(int r=0; r<wayNum; r++)
     {
       for (int c=0; c<setNum;c++)
       {
         struct cacheEntry* temp = (struct cacheEntry*) malloc(sizeof(struct cacheEntry));
-        temp->valid=0; temp->tag=-1;temp->counter=0;
+        temp->valid=0; temp->tag=-1;temp->counter=-1;
         cache[r][c]= *temp;
 
       }
@@ -46,30 +48,34 @@ int main(int argc, char* argv[])
 
     while(1)
     {
-      int address; int access; long long value;
+
+      int address; int access; unsigned char value;
       char word[64];
       char result[64];
-      fscanf(file, "%s",word) ;
+      fscanf(file, "%s",word);
+      count++;
       if(feof(file))
       {
         break;
       }
+
       else if(strcmp(word, "store")==0)
       {
-        fscanf(file, "%x %x %llx", &address, &access, &value);
+        fscanf(file, "%x %d", &address, &access);
+
         // printf("test save");
         // printf("%s\n", "test");
         // printf("0x%x %d %llx\n", address, access, value);
 
-        int mask = (1 << ((index+1)-(index+1))) - 1;
-        unsigned int x= (address>> (index+1)) & mask;
+        int mask = (1 << tagBits) - 1;
+        unsigned int x= (address>> (index+blockOff)) & mask;
         unsigned int tag=x; //gets tag bits
         //printf("test tag");
-        mask = (1 << ((index+1)-(blockOff+1))) - 1;
-         x= (address>> (blockOff+1)) & mask;
+        mask = (1 << index)- 1;
+         x= (address>>blockOff) & mask;
         unsigned int setindex= x; //gets setindex
       //  printf("test index");
-        mask = (1 << ((blockOff+1)-0)) - 1;
+        mask = (1 << (blockOff-0)) - 1;
         x= (address>> 0) & mask;
         unsigned int blockoffset=x; //gets block offset
 
@@ -79,14 +85,20 @@ int main(int argc, char* argv[])
         for(int i=0; i<wayNum; i++)
         {
           //printf("test array");
-          if((cache[i] + setindex)->tag==tag)
+          if(cache[i][setindex].tag==tag && cache[i][setindex].valid==1 /*&& memory[address]!=0*/)
           {
             //printf("%d",cache[i][setindex].tag );
             exists=1;
             strcpy(result, "hit");
-            *(memory+((setindex*blockSize)+blockoffset))=value; //writes to memory the new value
-            (cache[i] + setindex)->counter=count; //increments this to be new
-            count++;
+            for(int iter=0; iter<access; iter++)
+            {
+              fscanf(file, "%2hhx", &value);
+              memory[address+iter]=value;
+
+            }
+               //writes to memory the new value
+            cache[i][setindex].counter=count; //increments this to be new
+
           }
 
           // if(cache[i][setindex].valid==0)
@@ -98,46 +110,55 @@ int main(int argc, char* argv[])
         if(exists==0)// means there's a miss
         {
           strcpy(result, "miss");
-          memory[((setindex*blockSize)+blockoffset)]=value; //just writes it to memory
+          for(int iter=0; iter<access; iter++)
+          {
+            fscanf(file, "%2hhx", &value);
+            memory[address+iter]=value;
+
+          } //just writes it to memory
+
         }
 
-        printf("%s %d %s\n", word, address, result);
+        printf("%s 0x%x %s\n", word, address, result);
+        //printf("The tag is %d for 0x%x\n and index is %d\n", tag, address, setindex);
 
       }
       else if(strcmp(word, "load")==0)
       {
-        fscanf(file, "%d %d", &address, &access);
+        fscanf(file, "%x %d", &address, &access);
 
-        int mask = (1 << ((index+1)-(index+1))) - 1;
-        unsigned int x= (address>> (index+1)) & mask;
+        int mask = (1 << tagBits) - 1;
+        unsigned int x= (address>> (index+blockOff)) & mask;
         unsigned int tag=x; //gets tag bits
         //printf("test tag");
-        mask = (1 << ((index+1)-(blockOff+1))) - 1;
-         x= (address>> (blockOff+1)) & mask;
+        mask = (1 << index)- 1;
+         x= (address>>blockOff) & mask;
         unsigned int setindex= x; //gets setindex
       //  printf("test index");
-        mask = (1 << ((blockOff+1)-0)) - 1;
+        mask = (1 << blockOff) - 1;
         x= (address>> 0) & mask;
-        unsigned int blockoffset=x;
+        unsigned int blockoffset=x; //gets block offset
+
 
          //gets block offset
 
 
-        long long answer;
+        unsigned char answer=0;
         int exists=0;
         int full=1;
         for(int i=0; i<wayNum; i++)
         {
-          if((cache[i] + setindex)->tag==tag)
+          if(cache[i][setindex].tag==tag )
           {
             exists=1;
             strcpy(result, "hit");
-            answer=*(memory+((setindex*blockSize)+blockoffset)); //writes to memory the new value
-            (cache[i] + setindex)->counter=count; //increments this to be new
-            count++;
-          }
-
-          if((cache[i] + setindex)->valid==0)
+            answer= memory[(setindex*blockSize)+blockoffset]; //writes to memory the new value
+            cache[i][setindex].counter=count; //increments this to be new
+            break;
+          }}
+          for(int i=0; i<wayNum; i++)
+          {
+          if(cache[i][setindex].valid==0)
           {
             full=0; //finds if the set is full or not
           }
@@ -146,42 +167,50 @@ int main(int argc, char* argv[])
         if(exists==0)// means there's a miss
         {
           strcpy(result, "miss");
-          answer= memory[((setindex*blockSize)+blockoffset))];//reads value from memory
+          answer= memory[address];//reads value from memory
 
           if(full==0)//case there's still space
           {
             for(int i=0; i<wayNum; i++)
             {
-              if((cache[i] + setindex)->valid==0)//finds first available space
+              if(cache[i][setindex].valid==0)//finds first available space
               {
-                struct cacheEntry* new= &(cache[i][setindex]);
-                new->tag=tag; new->valid=1; new->counter=count;
-                count++;
+                struct cacheEntry* ac= &(cache[i][setindex]);
+                ac->tag=tag; ac->valid=1; ac->counter=count;
+
                 break;
           }
 
         }
       }
-      else //kick out the last used one and sub this in
+      else if(full==1)
+       //kick out the last used one and sub this in
       {
         int min=INT_MAX;
         int lruIndex;
         for(int i=0; i<wayNum; i++)
         {
-          if((cache[i] + setindex)->counter<min)
+          if(cache[i][setindex].counter<min)
           {
-            (cache[i] + setindex)->counter=min;
+            cache[i][setindex].counter=min;
             lruIndex=i;
           }
       }
-      struct cacheEntry* new= &(cache[lruIndex][setindex]);
-      new->tag=tag; new->valid=1; new->counter=count;
-      count++;
-    }
-
+      struct cacheEntry* ac= &(cache[lruIndex][setindex]);
+      ac->tag=tag; ac->valid=1; ac->counter=count;
 
     }
-    printf("%s %d %s %llx \n", word, address, result, answer);
+
+    }
+    printf("%s 0x%x %s ", word, address, result);
+    for(int iter=0; iter<access; iter++)
+    {
+      answer=memory[address+iter];
+      printf( "%02hhx", answer);
+
+    }
+    printf("\n");
+      //printf("The tag is %d for 0x%x\n and index is %d\n", tag, address, setindex);
   }
 }
 free(memory); fclose(file);
