@@ -4,12 +4,12 @@ import random
 import re
 
 #name=sys.argv[1]
-#name="/Users/nus/downloads/data.txt"
+
 def refine(name):
     with open(name, "r") as f:
         lines=f.readlines()
     a=''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
-    filename="/Users/nus/htdocs/codettes/%s.txt" %(a)
+    filename="/path/to/file" %(a)
     shorter="codettes/%s.txt" %(a)
     filea=open(filename, "w")
 
