@@ -41,7 +41,7 @@ def main(limit):
 
 
 
-        # if any(re.findall(r'Your entry to our contest has been confirmed', str(resp.text), re.IGNORECASE)):
+        # if any(re.findall(r'success', str(resp.text), re.IGNORECASE)):
         #     print "success with {}".format(email)
 
         # else:
